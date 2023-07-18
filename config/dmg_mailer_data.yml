@@ -1,0 +1,61 @@
+visualization:
+  x_label: ACTUAL_DEBT_VALUE
+  y_label: ACTUAL_INCOME
+  z_label: UTILIZATION
+  cmap: viridis
+  title: 'DMG Cluster Plot'
+
+clustering:
+  kmeans:
+    n_clusters: 4
+    kwargs:
+      init: random
+      max_iter: 300
+      random_state: 0
+  hierarchical:
+    n_clusters: 5
+    kwargs:
+      linkage: ward
+  dbscan:
+    eps: 0.5
+    min_samples: 5
+    kwargs:
+      metric: euclidean
+
+data:
+  connect_str: "DefaultEndpointsProtocol=https;AccountName=sae1devdsml;AccountKey=4ibtxE8OL2XGYTREaqA4op1OVZlecPy3321Btni1riQ31NfoMgy3rGOj29Vv4PAvfxkgeAy7PaMu+AStbtCZng==;EndpointSuffix=core.windows.net"
+  container_name: "ds-labs"
+  data_path:
+    input_pkl: data\input\cluster_data.pkl
+    input_url: https://sae1devdsml.blob.core.windows.net/ds-labs/data/ml-mailer-model/v4/training/DMG_ONLY/
+    output: data\output\sample.csv
+  max_campaign: 526
+  columns:
+    index:
+      - ID_TAG
+      - CUSTOMER_ID
+      - CAMPAIGN_CODE
+      - REFERENCE_CODE
+      - GROUP_CODE
+    label:
+      - RESPONSE
+    features:
+      numeric:
+        - AGE_OF_BUY
+        - DTI
+        - PRE_MAIL
+        - FIRST_MAIL
+        - LAST_MAIL
+        - SECOND_LAST
+        - THIRD_LAST
+        - UTILIZATION
+        - ESTIMATED_TRADES
+        - AGE
+        - MR_AMT
+        - ACTUAL_DEBT_VALUE
+        - RECENT_LOAN_AGE
+        - MR_MONTHLY_PMT
+        - LATE_PMT_CNT
+        - ACTUAL_INCOME
+      categorical: []
+        # - STATE
