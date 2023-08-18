@@ -13,6 +13,7 @@ from azure.storage.blob import ContainerClient, BlobServiceClient
 from urllib.parse import urlparse
 import seaborn as sns
 from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
 
 class Visualizer:
 
@@ -22,20 +23,31 @@ class Visualizer:
         self.data_config = data_config
         self.cluster_features = self.data_config['columns']['features']['numeric'] + self.data_config['columns']['features']['categorical']
 
-    def __generate_TSNE(self, df, features, plot = '2d'):
+    def __get_TSNE(self, df, features = None, plot = '2d'):
 
         if features is None:
-            features = [col.lower() for col in self.cluster_features]
-        else:
-            features = [col.lower() for col in features]
+            features = self.cluster_features
 
         # Use t-SNE for dimensionality reduction
         n_components = 2 if plot == '2d' else 3
-        tsne = TSNE(n_components = n_components, random_state = 0)
+        tsne = TSNE(n_components = n_components, random_state = 0, n_jobs=-1)
         X_tsne = tsne.fit_transform(df[features])
-        df[['TSNE_{x}' for x in range(1, n_components + 1)]] = X_tsne
+        df[[f'TSNE_{x}' for x in range(1, n_components + 1)]] = X_tsne
 
-        return  df[['TSNE_{x}' for x in range(1, n_components + 1)]]
+        return  df[[f'TSNE_{x}' for x in range(1, n_components + 1)]]
+
+    def __get_PCA(self, df, features = None, plot = '2d'):
+
+        if features is None:
+            features = self.cluster_features
+
+        # Use t-SNE for dimensionality reduction
+        n_components = 2 if plot == '2d' else 3
+        pca = PCA(n_components = n_components, random_state = 0)
+        X_pca = pca.fit_transform(df[features])
+        df[[f'PCA_{x}' for x in range(1, n_components + 1)]] = X_pca
+
+        return  df[[f'PCA_{x}' for x in range(1, n_components + 1)]]
 
     def boxplot_features(self, df, features):
 
@@ -55,6 +67,7 @@ class Visualizer:
         fig, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize=(5*ncols, 5*nrows))
 
         for idx, feature in enumerate(features):  # Exclude 'cluster'
+            feature_min, feature_max = df[feature].quantile(0.1), df[feature].quantile(0.9)
             for c in df['cluster'].unique():
                 # Select the axis where the plot will be drawn
                 ax = axs[idx, c]
@@ -62,6 +75,7 @@ class Visualizer:
                 sns.boxplot(y=df[df['cluster'] == c][feature], ax=ax)
                 # Set the title for the plot
                 ax.set_title(f'Cluster {c}, Feature: {feature}')
+                ax.set_ylim(feature_min, feature_max)
 
         plt.tight_layout()
         plt.show()
@@ -94,7 +108,7 @@ class Visualizer:
         plt.tight_layout()
         plt.show()
 
-    def visualize_clusters(self, data, plot, features, clustering_method, plot_unscaled, centers, dimensionality_reduction = None):
+    def visualize_clusters(self, data, plot, clustering_method, plot_unscaled, centers, dimensionality_reduction = None):
 
         if dimensionality_reduction is not None:
             assert dimensionality_reduction in ['TSNE', 'PCA'], "Dimensionality Reduction Method must be either TSNE or PCA"
@@ -105,21 +119,35 @@ class Visualizer:
 
         if plot_unscaled:
             x_label, y_label, z_label = x_label.lower(), y_label.lower(), z_label.lower()
-        if dimensionality_reduction == 'TSNE':
-            tsne_data = self.__generate_TSNE(data, features, plot)
-            x_label, y_label, z_label = tsne_data.columns[0], tsne_data.columns[1], tsne_data.columns[2]
+        if dimensionality_reduction is not None:
+            print(f"Performing Dimensionality Reduction with scaled data using {dimensionality_reduction}..")
+            if dimensionality_reduction == 'TSNE':
+                print('Reducing samples for TSNE visualization..')
+                data = data.sample(n = 100000) if len(data) > 50000 else data
+                dim_reduced_data = self.__get_TSNE(df = data, features = None, plot = plot)
+            elif dimensionality_reduction == 'PCA':
+                data = data.sample(n = 1000000) if len(data) > 1000000 else data
+                dim_reduced_data = self.__get_PCA(df = data, features = None, plot = plot)
+            x_label, y_label = dim_reduced_data.columns[0], dim_reduced_data.columns[1]
+            if plot == '3d':
+                z_label = dim_reduced_data.columns[2]
 
-    
         labels = data['cluster']
         
         fig = plt.figure(figsize = (12,8))
 
         if plot == '3d':
-
             ax = fig.add_subplot(111, projection='3d')
-            ax.scatter(data[x_label], data[y_label], data[z_label], c=labels, cmap='viridis')
+            if self.config['show_label']:
+                data_0, data_1 = data[data['Response'] == 0], data[data['Response'] == 1]
+                labels_0, labels_1 = data_0['cluster'], data_1['cluster']
+                ax.scatter(data_0[x_label], data_0[y_label], data_0[z_label], c=labels_0, cmap='Spectral', marker = 'o')
+                ax.scatter(data_1[x_label], data_1[y_label], data_1[z_label], c=labels_1, cmap='Spectral', marker = '<')
+            else:
+                ax.scatter(data[x_label], data[y_label], data[z_label], c=labels, cmap='Spectral')
             ax.set_zlabel(z_label)
-            ax.scatter(centers[:,0], centers[:,1], centers[:,2], marker='*', c='black', s=150)
+            if centers is not None:
+                ax.scatter(centers[:,0], centers[:,1], centers[:,2], marker='*', c='black', s=150)
 
             xmin, xmax = data.iloc[:, 0].min(), data.iloc[:, 0].max()
             ymin, ymax = data.iloc[:, 1].min(), data.iloc[:, 1].max()
@@ -129,16 +157,13 @@ class Visualizer:
             ax.set_xlim(xmin - xpad, xmax + xpad) 
             ax.set_ylim(ymin - ypad, ymax + ypad) 
             ax.set_zlim(zmin - zpad, zmax + zpad)
-
         else:
+            plt.scatter(data[x_label], data[y_label], c=labels, cmap='Spectral')
 
-            plt.scatter(data[x_label], data[y_label], c=labels, cmap='viridis')
-
-        t = fig.suptitle(self.config['title'] + " with "+ clustering_method, fontsize=14)
+        t = fig.suptitle(self.config['title'] + " with " + clustering_method + " using " + f"{dimensionality_reduction}", fontsize=14)
         plt.xlabel(x_label)
         plt.ylabel(y_label)
         plt.show()
-
 
 if __name__ == '__main__':
     

@@ -18,33 +18,40 @@ class Clustering:
         self.config = clustering_config
         self.data_config = data_config
         self.cluster_features = self.data_config['columns']['features']['numeric'] + self.data_config['columns']['features']['categorical']
+        self.model = None
 
     def cluster_data(self, data, clustering_method = 'kmeans'):
 
+        print("Clustering using {}...".format(clustering_method))
+
         df = data[self.cluster_features ]
 
-        if clustering_method == 'kmeans':
-            print('hi')
-            kmeans_config = self.config['kmeans']
-            n_clusters = kmeans_config['n_clusters']
-            model = KMeans(n_clusters=n_clusters, **kmeans_config['kwargs'])
-            labels = model.fit_predict(df)
-        elif clustering_method == 'hierarchical':
-            hierarchical_config = self.config['hierarchical']
-            n_clusters = hierarchical_config['n_clusters']
-            model = AgglomerativeClustering(n_clusters=n_clusters, **hierarchical_config['kwargs'])
-            labels = model.fit_predict(df)
-        elif clustering_method == 'dbscan':
-            dbscan_config = self.config['dbscan']
-            eps = dbscan_config['eps']
-            min_samples = dbscan_config['min_samples']
-            model = DBSCAN(eps=eps, min_samples=min_samples, **dbscan_config['kwargs'])
-            labels = model.fit_predict(df)
+        if self.model is None:
+            if clustering_method == 'kmeans':
+                kmeans_config = self.config['kmeans']
+                n_clusters = kmeans_config['n_clusters']
+                self.model = KMeans(n_clusters=n_clusters, **kmeans_config['kwargs'])
+                labels = self.model.fit_predict(df)
+            elif clustering_method == 'hierarchical':
+                hierarchical_config = self.config['hierarchical']
+                n_clusters = hierarchical_config['n_clusters']
+                self.model = AgglomerativeClustering(n_clusters=n_clusters, **hierarchical_config['kwargs'])
+                labels = self.model.fit_predict(df)
+            elif clustering_method == 'dbscan':
+                dbscan_config = self.config['dbscan']
+                eps = dbscan_config['eps']
+                min_samples = dbscan_config['min_samples']
+                self.model = DBSCAN(eps=eps, min_samples=min_samples, **dbscan_config['kwargs'])
+                labels = self.model.fit_predict(df)
+        else:
+            labels = self.model.predict(df)
   
         data['cluster'] = labels
-        print(labels)
+        print('Done!', labels)
 
-        return data, model.cluster_centers_
+        cluster_centers = self.model.cluster_centers_ if clustering_method in ['kmeans', 'hierarchical'] else None
+
+        return data, cluster_centers
     
     def elbow_plot(self, data, max_cluster = 12, clustering_method = 'kmeans'):
 
@@ -65,8 +72,10 @@ class Clustering:
 
     def tune_hyperparameters(self, model, data):
 
+        data = data[self.cluster_features ]
+
         if model == 'kmeans':
-            param_grid = {'n_clusters': np.arange(5, 11), 'init': ['k-means++', 'random']}
+            param_grid = {'n_clusters': np.arange(2, 6)}#, 'init': ['k-means++', 'random'], 'algorithm': ['lloyd', 'elkan']}
         elif model == 'hierarchical':
             param_grid = {'n_clusters': np.arange(5, 11), 'linkage': ['ward', 'complete', 'average', 'single']}
         elif model == 'dbscan':
@@ -89,11 +98,13 @@ class Clustering:
                 
             estimator.fit(data)
             labels = estimator.labels_
-            score = silhouette_score(data, labels)
+            score = silhouette_score(data, labels, n_jobs=-1)
             
             if score > best_score:
                 best_score = score
                 best_params = params
+                self.model = estimator
+            print(score, params)
                 
         return best_params, best_score
         
@@ -121,20 +132,22 @@ class Clustering:
             data.append(
                 [
                     cluster, 
-                    cluster_data.min(), 
+                    pd.Series([len(cluster_data)]*len(cluster_data.columns), index = cluster_data.columns),
+                    # cluster_data.min(), 
                     cluster_data.quantile(0.25),
                     cluster_data.median(), 
                     cluster_data.quantile(0.75),
-                    cluster_data.max()
+                    # cluster_data.max()
                 ]
             )
 
         # Create a new dataframe with the aggregated data
-        cluster_summary = pd.concat([pd.DataFrame(data[i][1:], index=['min', 'q25', 'median', 'q75', 'max'], columns=df.columns[:-1]).assign(cluster=data[i][0]) for i in range(len(data))])
+        # cluster_summary = pd.concat([pd.DataFrame(data[i][1:], index=['count', 'min', 'q25', 'median', 'q75', 'max'], columns=df.columns[:-1]).assign(cluster=data[i][0]) for i in range(len(data))])
+        cluster_summary = pd.concat([pd.DataFrame(data[i][1:], index=['count', 'q25', 'median', 'q75'], columns=df.columns[:-1]).assign(cluster=data[i][0]) for i in range(len(data))])
 
         # Pivot the dataframe to get the desired format
         cluster_summary = cluster_summary.set_index('cluster', append=True).stack().unstack('cluster').swaplevel().sort_index()
-        return cluster_summary
+        return cluster_summary.round(3)
 
 
 if __name__ == '__main__':

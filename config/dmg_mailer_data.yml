@@ -4,12 +4,14 @@ visualization:
   z_label: UTILIZATION
   cmap: viridis
   title: 'DMG Cluster Plot'
+  show_label: true
 
 clustering:
   kmeans:
-    n_clusters: 4
+    n_clusters: 3
     kwargs:
-      init: random
+      algorithm: elkan
+      init: k-means++
       max_iter: 300
       random_state: 0
   hierarchical:
@@ -44,10 +46,10 @@ data:
         - AGE_OF_BUY
         - DTI
         - PRE_MAIL
-        - FIRST_MAIL
-        - LAST_MAIL
-        - SECOND_LAST
-        - THIRD_LAST
+        # - FIRST_MAIL
+        # - LAST_MAIL
+        # - SECOND_LAST
+        # - THIRD_LAST
         - UTILIZATION
         - ESTIMATED_TRADES
         - AGE

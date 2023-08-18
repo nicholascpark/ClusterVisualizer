@@ -56,23 +56,33 @@ class DataLoader:
             df['age_of_buy'] = df["CAMPAIGN_CODE"] - df["GROUP_CODE"]
             if {"ACTUAL_DEBT_VALUE", "ACTUAL_INCOME"} <= set(df.columns):
                 df["DTI"] = df["ACTUAL_DEBT_VALUE"] / df["ACTUAL_INCOME"] 
-                df["DTI"] = df["DTI"].apply(lambda x: 10 if x > 10 else x)
+                df["DTI"] = df["DTI"].apply(lambda x: 1.1 if x > 1.1 else x)
         print(df.columns)
         print(df.shape)
 
         df = df[df['CAMPAIGN_CODE'] < self.config['max_campaign']]
         return df
 
-    def extract_data(self, source_type, fraction):
+    def extract_data(self, path = None, source_type = 'pickle', fraction = 0.1):
 
-        if source_type == 'pickle':
-            data = pd.read_pickle(self.config['data_path']['input_pkl'])
-        elif source_type == 'csv':
-            data = pd.read_csv(self.config['data_path']['input_csv'])
+        if path is not None:
+            if path.endswith('.pkl'):
+                data = pd.read_pickle(path)
+                data["DTI"] = data["DTI"].apply(lambda x: 1.1 if x > 2 else x)
+            elif path.endswith('.csv'):
+                data = pd.read_csv(path)
         else:
-            data = self.load_data_from_cloud(self.config['data_path']['input_url'])
+            if source_type == 'pickle':
+                data = pd.read_pickle(self.config['data_path']['input_pkl'])
+                data["DTI"] = data["DTI"].apply(lambda x: 1.1 if x > 2 else x)
+            elif source_type == 'csv':
+                data = pd.read_csv(self.config['data_path']['input_csv'])
+            else:
+                data = self.load_data_from_cloud(self.config['data_path']['input_url'])
 
         data = data.rename(columns = lambda x: x.upper())
+
+        # print("1", data.columns)
 
         def NestedDictValues(d):
             for v in d.values():
@@ -84,11 +94,17 @@ class DataLoader:
         data = data[sum(NestedDictValues(self.config['columns']), [])]
         print(".\n.\n.\n... Data loaded successfully with shape: ", data.shape)
 
-        data = self.preprocess_data(data, self.config['columns']['features'])
+        # print("2", data.columns)
 
         # Sample the data
-        data = data.sample(frac = float(fraction))
+        data = data.sample(frac = float(fraction), random_state=42)
         print("Data sampled with fraction:", fraction, "and shape: ", data.shape)
+
+        # print("3", data.columns)
+
+        data = self.preprocess_data(data, self.config['columns']['features'])
+
+        # print(data.columns)
 
         return data
 
@@ -124,7 +140,10 @@ class DataLoader:
         feature_names_out = [x.split('__')[-1] for x in self.preprocessor.get_feature_names_out()]
         processed_data = pd.DataFrame(processed_data, columns = feature_names_out)
         processed_data[original_data.columns] = original_data.values
+        processed_data['Response'] = data['RESPONSE']
 
-        processed_data = processed_data.sort_values('GROUP_CODE', ascending = False).drop_duplicates('CUSTOMER_ID',keep='first')
+        # processed_data = processed_data.sort_values('GROUP_CODE', ascending = False).drop_duplicates('CUSTOMER_ID',keep='first')
+
+        print('Preprocessing data complete with shape:, ', processed_data.shape)
 
         return  processed_data
