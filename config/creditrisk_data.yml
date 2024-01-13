@@ -30,13 +30,9 @@ cluster:
 
 columns:
   index:
-    - ID_TAG
-    - CUSTOMER_ID
-    - CAMPAIGN_CODE
-    - REFERENCE_CODE
-    - GROUP_CODE
+    - id
   label:
-    - RESPONSE
+    - default
   features:
     categorical:
         - application_type
