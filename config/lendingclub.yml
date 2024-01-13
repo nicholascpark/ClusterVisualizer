@@ -7,7 +7,7 @@ plot:
   y_label: all_util
   z_label: application_date
   cmap: viridis
-  title: Creditrisk Cluster Plot
+  title: Lendingclub Cluster Plot
 
 cluster:
   kmeans:
